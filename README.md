@@ -49,38 +49,7 @@ The script will:
 
 ## GitHub Actions Workflow
 
-For automated submission via GitHub Actions, create a workflow file (e.g., `.github/workflows/submit-B12-application.yml`) with the following content:
-
-```yaml
-name: Submit B12 Job Application
-
-on:
-  workflow_dispatch:
-
-jobs:
-  submit:
-    runs-on: ubuntu-latest
-    environment: B12-Environment
-    
-    steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Run submission
-      env:
-        # From Environment VARIABLES
-        APPLICANT_NAME: ${{ vars.APPLICANT_NAME }}
-        APPLICANT_EMAIL: ${{ vars.APPLICANT_EMAIL }}
-        RESUME_LINK: ${{ vars.RESUME_LINK }}
-        REPOSITORY_LINK: ${{ vars.REPOSITORY_LINK }}
-        
-        # From Environment SECRETS
-        B12_SIGNING_SECRET: ${{ secrets.B12_SIGNING_SECRET }}
-        
-      run: python main.py
-```
+The repository includes a GitHub Actions workflow file at `.github/workflows/submit-B12-application.yml` for automated submission. The workflow is triggered manually and runs on Ubuntu with Python 3.11.
 
 ### Setup for GitHub Actions
 
