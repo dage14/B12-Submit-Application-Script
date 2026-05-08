@@ -81,7 +81,9 @@ def main():
     if repository and run_id:
         action_run_link = f"{server_url}/{repository}/actions/runs/{run_id}"
     else:
-        action_run_link = os.getenv('ACTION_RUN_LINK', 'https://link-to-github-or-another-forge.example.com/your/repository/actions/runs/run_id')
+        print(" Error: GITHUB_REPOSITORY and/or GITHUB_RUN_ID environment variables not set")
+        sys.exit(1)
+        #action_run_link = os.getenv('ACTION_RUN_LINK', 'https://link-to-github-or-another-forge.example.com/your/repository/actions/runs/run_id')
     SECRET = os.getenv('B12_SIGNING_SECRET')
     if not SECRET:
         print(" Error: B12_SIGNING_SECRET environment variable not set")
