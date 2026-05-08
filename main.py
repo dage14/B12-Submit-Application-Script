@@ -8,6 +8,8 @@ import os
 import sys
 import urllib.request
 import urllib.error
+import time
+
 
 def create_submission_payload(name, email, resume_link, repository_link, action_run_link):
     timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
@@ -35,7 +37,15 @@ def generate_signature(payload, secret):
     
     return f"sha256={signature}"
 
-def submit_application(payload, signature):
+def is_retryable_error(status_code):
+    """Check if error is retryable"""
+    if status_code is None:
+        return True  # Network/connection error
+    
+    # Retry on server errors (5xx) and rate limiting (429)
+    return status_code >= 500 or status_code == 429
+
+def submit_application(payload, signature,max_retries=3, initial_delay=1):
     url = "https://b12.io/apply/submission"
     
     headers = {
@@ -51,15 +61,59 @@ def submit_application(payload, signature):
         method='POST'
     )
     
-    try:
-        # Send request
-        with urllib.request.urlopen(req) as response:
-            response_data = response.read().decode('utf-8')
-            return response.getcode(), response_data
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode('utf-8')
-    except urllib.error.URLError as e:
-        return None, str(e)
+    for attempt in range(max_retries + 1):  # +1 for initial attempt
+        try:
+            print(f"\n Attempt {attempt + 1}/{max_retries + 1}...")
+            
+            # Send request
+            with urllib.request.urlopen(req) as response:
+                response_data = response.read().decode('utf-8')
+                status_code = response.getcode()
+                
+                if status_code == 200:
+                    return status_code, response_data
+                else:
+                    # Non-200 response but no exception
+                    if attempt < max_retries and is_retryable_error(status_code):
+                        delay = initial_delay * (2 ** attempt)  # Exponential backoff
+                        print(f"Warning: HTTP {status_code} - Retryable error. Waiting {delay}s before retry...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        return status_code, response_data
+                        
+        except urllib.error.HTTPError as e:
+            status_code = e.code
+            error_body = e.read().decode('utf-8')
+            
+            if attempt < max_retries and is_retryable_error(status_code):
+                delay = initial_delay * (2 ** attempt)
+                print(f"Warning: HTTP {status_code} - Retryable error. Waiting {delay}s before retry...")
+                print(f"   Error details: {error_body[:200]}")  # Print first 200 chars
+                time.sleep(delay)
+                continue
+            else:
+                return status_code, error_body
+                
+        except urllib.error.URLError as e:
+            # Connection error
+            error_msg = str(e)
+            
+            if attempt < max_retries:
+                delay = initial_delay * (2 ** attempt)
+                print(f"Warning: Network error: {error_msg}")
+                print(f"   Retryable error. Waiting {delay}s before retry...")
+                time.sleep(delay)
+                continue
+            else:
+                return None, error_msg
+                
+        except Exception as e:
+            # Unexpected error - don't retry
+            print(f"Error: Unexpected error: {str(e)}")
+            return None, str(e)
+    
+    return None, "Max retries exceeded"
 
 def main():
     name = os.getenv('APPLICANT_NAME', 'Dagmawi Debru Gebremeskel')
@@ -81,9 +135,11 @@ def main():
     if repository and run_id:
         action_run_link = f"{server_url}/{repository}/actions/runs/{run_id}"
     else:
+        #for local testing 
+        #action_run_link = os.getenv('ACTION_RUN_LINK', 'https://link-to-github-or-another-forge.example.com/your/repository/actions/runs/run_id')
         print(" Error: GITHUB_REPOSITORY and/or GITHUB_RUN_ID environment variables not set")
         sys.exit(1)
-        #action_run_link = os.getenv('ACTION_RUN_LINK', 'https://link-to-github-or-another-forge.example.com/your/repository/actions/runs/run_id')
+        
     SECRET = os.getenv('B12_SIGNING_SECRET')
     if not SECRET:
         print(" Error: B12_SIGNING_SECRET environment variable not set")
@@ -97,8 +153,8 @@ def main():
     signature = generate_signature(payload, SECRET)
     print(f"Signature: {signature}")
     
-    print("\nSubmitting application...")
-    status_code, response = submit_application(payload, signature)
+    print("\nSubmitting application  with retry logic (max 3 retries)...")
+    status_code, response = submit_application(payload, signature, max_retries=3)
     
     if status_code == 200:
         print(f"\n Success! HTTP {status_code}")
