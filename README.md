@@ -8,6 +8,7 @@ This Python script automates the submission of job applications to B12.io. It cr
 - Creates an HMAC-SHA256 signature for authentication
 - Submits the application to the B12 API endpoint
 - Handles success and error responses
+- Implements retry logic with exponential backoff for API submissions to handle transient failures (up to 3 retries for 5xx errors, 429 rate limiting, or network issues)
 
 ## Prerequisites
 
@@ -77,10 +78,13 @@ On failure:
 - Error status code and message
 - Script exits with code 1
 
+The script may display retry attempts with warnings for transient errors (e.g., "Warning: HTTP 502 - Retryable error. Waiting 2s before retry...").
+
 ## Troubleshooting
 
 - Ensure `B12_SIGNING_SECRET` is set; the script will exit if not found.
 - Check network connectivity for the API call.
 - Verify all links are valid and accessible.
 - For GitHub Actions, ensure the workflow has the necessary permissions to access run details.
+- The script retries up to 3 times with exponential backoff (1s, 2s, 4s) for server errors (5xx), rate limiting (429), or network issues. If all retries fail, it will exit with the final error.
 
